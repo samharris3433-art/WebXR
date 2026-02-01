@@ -1,33 +1,216 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>My Quest 2 WebXR Game</title>
-    <meta name="description" content="A-Frame WebXR Starter">
+    <title>Neon Void Defender</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.3/dist/aframe-environment-component.min.js"></script>
   </head>
   <body>
-    <a-scene>
-      <a-entity environment="preset: forest; dressingAmount: 500"></a-entity>
+    <script>
+      // 1. GAME STATE MANAGEMENT
+      AFRAME.registerComponent('game-manager', {
+        init: function () {
+          this.score = 0;
+          this.isGameOver = false;
+          this.spawnInterval = 2000;
+          this.lastSpawnTime = 0;
+          this.scoreText = document.querySelector('#score-text');
+          this.msgText = document.querySelector('#msg-text');
+          
+          // Audio Context for pew-pew sounds
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        },
 
-      <a-entity id="rig">
-        <a-camera position="0 1.6 0"></a-camera>
-        <a-entity oculus-touch-controls="hand: left"></a-entity>
-        <a-entity oculus-touch-controls="hand: right" laser-controls="hand: right"></a-entity>
+        tick: function (time, timeDelta) {
+          if (this.isGameOver) return;
+
+          // Spawning logic
+          if (time - this.lastSpawnTime > this.spawnInterval) {
+            this.spawnEnemy();
+            this.lastSpawnTime = time;
+            // Make game harder over time
+            if (this.spawnInterval > 500) this.spawnInterval -= 10;
+          }
+        },
+
+        spawnEnemy: function () {
+          const enemy = document.createElement('a-entity');
+          
+          // Random position in a semi-circle in front of player
+          const angle = Math.random() * Math.PI; // 0 to 180 degrees
+          const radius = 10;
+          const x = radius * Math.cos(angle);
+          const z = -radius * Math.sin(angle);
+          const y = 1 + Math.random() * 2;
+
+          enemy.setAttribute('geometry', {primitive: 'icosahedron', radius: 0.5});
+          enemy.setAttribute('material', {color: '#ff0055', emissive: '#550022', emissiveIntensity: 0.5});
+          enemy.setAttribute('position', {x: x, y: y, z: z});
+          
+          // Add behavior components
+          enemy.setAttribute('enemy-behavior', '');
+          enemy.classList.add('enemy'); // For raycasting
+          
+          this.el.sceneEl.appendChild(enemy);
+        },
+
+        updateScore: function (points) {
+          this.score += points;
+          this.scoreText.setAttribute('value', `SCORE: ${this.score}`);
+          this.playSound('hit');
+        },
+
+        gameOver: function () {
+          this.isGameOver = true;
+          this.msgText.setAttribute('value', 'GAME OVER\nRefresh to Restart');
+          this.msgText.setAttribute('visible', true);
+          this.playSound('over');
+        },
+
+        playSound: function(type) {
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            const osc = this.audioCtx.createOscillator();
+            const gain = this.audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(this.audioCtx.destination);
+
+            if (type === 'shoot') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(110, this.audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(this.audioCtx.currentTime + 0.1);
+            } else if (type === 'hit') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, this.audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(this.audioCtx.currentTime + 0.1);
+            }
+        }
+      });
+
+      // 2. ENEMY LOGIC
+      AFRAME.registerComponent('enemy-behavior', {
+        init: function () {
+          this.speed = 2 + Math.random(); // Random speed
+          this.player = document.querySelector('#camera');
+        },
+        tick: function (time, timeDelta) {
+          if (!this.player) return;
+          
+          const currentPos = this.el.object3D.position;
+          // Simple movement toward 0,1.6,0 (approx player head)
+          const targetPos = new THREE.Vector3(0, 1.6, 0);
+          const direction = targetPos.sub(currentPos).normalize();
+          
+          const distance = currentPos.distanceTo(new THREE.Vector3(0, 1.6, 0));
+
+          // Move
+          this.el.object3D.position.add(direction.multiplyScalar(this.speed * (timeDelta / 1000)));
+          
+          // Rotate for cool effect
+          this.el.object3D.rotation.x += 0.01;
+          this.el.object3D.rotation.y += 0.02;
+
+          // Game Over Check
+          if (distance < 1) {
+             document.querySelector('[game-manager]').components['game-manager'].gameOver();
+             this.el.remove();
+          }
+        }
+      });
+
+      // 3. WEAPON / SHOOTING LOGIC
+      AFRAME.registerComponent('blaster', {
+        init: function () {
+          this.el.addEventListener('triggerdown', this.shoot.bind(this));
+          this.gameManager = document.querySelector('[game-manager]').components['game-manager'];
+        },
+        shoot: function () {
+          if (this.gameManager.isGameOver) return;
+          
+          // Create visual bullet
+          const bullet = document.createElement('a-entity');
+          bullet.setAttribute('geometry', {primitive: 'cylinder', radius: 0.02, height: 0.2});
+          bullet.setAttribute('material', {color: '#00ffff', emissive: '#00ffff'});
+          bullet.setAttribute('rotation', {x: -90, y: 0, z: 0});
+          
+          // Get controller position/rotation
+          const position = this.el.object3D.getWorldPosition(new THREE.Vector3());
+          const rotation = this.el.object3D.getWorldQuaternion(new THREE.Quaternion());
+          
+          bullet.object3D.position.copy(position);
+          bullet.object3D.quaternion.copy(rotation);
+          
+          // Add bullet behavior
+          bullet.setAttribute('bullet-mover', '');
+          
+          this.el.sceneEl.appendChild(bullet);
+          this.gameManager.playSound('shoot');
+          
+          // Raycast for instant hit (arcade style)
+          // We use the raycaster attached to the controller
+          const raycaster = this.el.components.raycaster;
+          if (raycaster) {
+             const intersections = raycaster.getIntersection(document.querySelectorAll('.enemy'));
+             if (intersections.length > 0) {
+                 const hitEnemy = intersections[0].object.el;
+                 this.createExplosion(hitEnemy.object3D.position);
+                 hitEnemy.remove();
+                 this.gameManager.updateScore(100);
+             }
+          }
+        },
+        createExplosion: function(pos) {
+            const particle = document.createElement('a-entity');
+            particle.setAttribute('position', pos);
+            particle.setAttribute('text', {value: 'BOOM!', align: 'center', color: '#FFF', width: 4});
+            // Animation to float up and fade
+            particle.setAttribute('animation', {property: 'position', to: `${pos.x} ${pos.y + 1} ${pos.z}`, dur: 500});
+            particle.setAttribute('animation__scale', {property: 'scale', to: '0 0 0', dur: 500});
+            
+            this.el.sceneEl.appendChild(particle);
+            setTimeout(() => { particle.remove() }, 500);
+        }
+      });
+
+      AFRAME.registerComponent('bullet-mover', {
+          tick: function(time, timeDelta) {
+              this.el.translateZ(-10 * (timeDelta/1000)); // Move forward fast
+              // Cleanup if too far
+              if (this.el.object3D.position.length() > 20) {
+                  this.el.remove();
+              }
+          }
+      });
+    </script>
+
+    <a-scene game-manager background="color: #000">
+      
+      <a-entity environment="preset: tron; grid: 1x1; skyType: atmosphere; lighting: point"></a-entity>
+
+      <a-text id="score-text" value="SCORE: 0" position="-1 2.5 -3" color="#FFF" width="10"></a-text>
+      <a-text id="msg-text" value="" position="0 1.5 -2" align="center" color="#FF0000" width="8" visible="false"></a-text>
+
+      <a-entity id="rig" position="0 0 0">
+        <a-camera id="camera" position="0 1.6 0"></a-camera>
+        
+        <a-entity id="leftHand" 
+                  laser-controls="hand: left" 
+                  raycaster="objects: .enemy; far: 50; showLine: true; lineColor: #00ffff"
+                  blaster></a-entity>
+                  
+        <a-entity id="rightHand" 
+                  laser-controls="hand: right" 
+                  raycaster="objects: .enemy; far: 50; showLine: true; lineColor: #00ffff"
+                  blaster></a-entity>
       </a-entity>
 
-      <a-box id="box" position="-1 0.5 -3" rotation="0 45 0" color="#4CC3D9" 
-             animation="property: rotation; to: 0 405 0; loop: true; dur: 10000">
-      </a-box>
-      
-      <a-sphere position="0 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
-      
-      <a-cylinder position="1 0.75 -3" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
-      
-      <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
-
-      <a-light type="ambient" color="#BBB"></a-light>
-      <a-light type="directional" color="#FFF" intensity="0.6" position="-1 2 4"></a-light>
     </a-scene>
   </body>
 </html>
