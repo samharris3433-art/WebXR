@@ -1,78 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>WebXR Quest 2 Template</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    #enterVR {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      padding: 16px 24px;
-      font-size: 18px;
-      cursor: pointer;
-    }
-  </style>
-</head>
-<body>
-  <button id="enterVR">Enter VR</button>
+<html>
+  <head>
+    <title>My Quest 2 WebXR Game</title>
+    <meta name="description" content="A-Frame WebXR Starter">
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
+  </head>
+  <body>
+    <a-scene>
+      <a-entity environment="preset: forest; dressingAmount: 500"></a-entity>
 
-  <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-    import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/webxr/VRButton.js';
+      <a-entity id="rig">
+        <a-camera position="0 1.6 0"></a-camera>
+        <a-entity oculus-touch-controls="hand: left"></a-entity>
+        <a-entity oculus-touch-controls="hand: right" laser-controls="hand: right"></a-entity>
+      </a-entity>
 
-    let scene, camera, renderer;
+      <a-box id="box" position="-1 0.5 -3" rotation="0 45 0" color="#4CC3D9" 
+             animation="property: rotation; to: 0 405 0; loop: true; dur: 10000">
+      </a-box>
+      
+      <a-sphere position="0 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+      
+      <a-cylinder position="1 0.75 -3" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+      
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
 
-    init();
-
-    function init() {
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x101010);
-
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.set(0, 1.6, 3); // eye height
-
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
-
-      document.body.appendChild(VRButton.createButton(renderer));
-
-      // Simple floor
-      const floorGeo = new THREE.PlaneGeometry(10, 10);
-      const floorMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-      const floor = new THREE.Mesh(floorGeo, floorMat);
-      floor.rotation.x = -Math.PI / 2;
-      scene.add(floor);
-
-      // Simple cube
-      const cubeGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-      const cubeMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
-      const cube = new THREE.Mesh(cubeGeo, cubeMat);
-      cube.position.set(0, 1.6, -1.5);
-      scene.add(cube);
-
-      // Light
-      const light = new THREE.HemisphereLight(0xffffff, 0x222222, 1.2);
-      scene.add(light);
-
-      window.addEventListener('resize', onWindowResize);
-
-      renderer.setAnimationLoop(() => {
-        cube.rotation.y += 0.01;
-        renderer.render(scene, camera);
-      });
-    }
-
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-  </script>
-</body>
+      <a-light type="ambient" color="#BBB"></a-light>
+      <a-light type="directional" color="#FFF" intensity="0.6" position="-1 2 4"></a-light>
+    </a-scene>
+  </body>
 </html>
